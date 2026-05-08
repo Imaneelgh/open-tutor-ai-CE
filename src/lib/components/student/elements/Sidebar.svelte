@@ -11,6 +11,8 @@
 	import Message from '$lib/components/icons/Messages.svelte';
 	import type { ComponentType } from 'svelte';
 	import { writable, type Writable } from 'svelte/store';
+	import QuizIcon from '$lib/components/icons/Quiz.svelte';  
+	
 	const i18n = getContext('i18n');
 
 	// Use a simple boolean for sidebar state instead of a store
@@ -155,6 +157,7 @@
 			{ id: 'classrooms', label: 'My Classrooms', icon: Classroom },
 			{ id: 'supports', label: 'Support', icon: Classroom },
 			{ id: 'assignments', label: 'Assignments', icon: Assignment },
+			{ id: 'quizzes', label: 'Quizzes', icon: QuizIcon },
 			{ id: 'messages', label: 'Messages', icon: Message },
 			{ id: 'settings', label: 'Profile & Settings', icon: Settings }
 		],
