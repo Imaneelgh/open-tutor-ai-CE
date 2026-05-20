@@ -18,6 +18,10 @@
   let score = 0;
   let quizFinished = false;
 
+  // État du timer
+  let timeRemaining: number | null = null; // Temps restant en secondes
+  let timerInterval: any = null;
+  let isTimerRunning = false;
   const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
   onMount(async () => {
@@ -76,10 +80,17 @@
     isAnswered = false;
     score = 0;
     quizFinished = false;
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
+    answers = {}; // Réinitialiser les réponses
+  
+    // Démarrer le timer si un temps limite est défini
+    if (quiz.time_limit_minutes) {
+      startTimer(quiz.time_limit_minutes);
+    }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
 
   function backToList() {
+    stopTimer();
     activeQuiz = null;
     fetchQuizzes();
   }
@@ -112,6 +123,63 @@
     activeQuiz = null;
     fetchQuizzes();
   }
+  
+  function startTimer(minutes: number) {
+  timeRemaining = minutes * 60; // Convertir en secondes
+  isTimerRunning = true;
+  
+  if (timerInterval) clearInterval(timerInterval);
+  
+  timerInterval = setInterval(() => {
+    if (timeRemaining !== null && timeRemaining > 0) {
+      timeRemaining--;
+    } else if (timeRemaining === 0) {
+      // Temps écoulé → Auto-soumission
+      clearInterval(timerInterval);
+      isTimerRunning = false;
+      autoSubmitQuiz();
+    }
+  }, 1000);
+}
+
+function stopTimer() {
+  if (timerInterval) {
+    clearInterval(timerInterval);
+    timerInterval = null;
+    isTimerRunning = false;
+  }
+}
+
+function formatTime(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+}
+
+async function autoSubmitQuiz() {
+  console.log("⏰ Temps écoulé! Soumission automatique...");
+  if (selectedAnswer !== null && !isAnswered) {
+    validateAnswer();
+  }
+  await submitCurrentQuiz();
+}
+
+async function submitCurrentQuiz() {
+  if (!activeQuiz) return;
+  
+  try {
+    const result = await submitQuiz({
+      quiz_id: activeQuiz.id,
+      answers: answers
+    });
+    
+    quizResult = result;
+    quizFinished = true;
+    stopTimer();
+  } catch (err) {
+    console.error("Erreur de soumission:", err);
+  }
+}
 </script>
 
 
