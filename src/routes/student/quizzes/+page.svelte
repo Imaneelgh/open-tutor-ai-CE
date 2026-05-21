@@ -5,24 +5,34 @@
 
   const i18n = getContext('i18n');
 
-  // État global
+  // === ÉTAT GLOBAL ===
   let quizzes: any[] = [];
   let activeQuiz: any = null;
   let loading = true;
   let error: string | null = null;
 
-  // État du quiz en cours
+  // === ÉTAT DU QUIZ ===
   let currentQuestionIndex = 0;
   let selectedAnswer: number | null = null;
   let isAnswered = false;
   let score = 0;
   let quizFinished = false;
+  let answers: Record<string, any> = {}; // ✅ Variable ajoutée (manquante)
+  let quizResult: any = null;            // ✅ Variable ajoutée (manquante)
 
-  // État du timer
-  let timeRemaining: number | null = null; // Temps restant en secondes
+  // === ÉTAT DU TIMER ===
+  let timeRemaining: number | null = null;
   let timerInterval: any = null;
   let isTimerRunning = false;
+
   const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+  // === CLEANUP AU DÉMONTAGE ===
+  onMount(() => {
+    return () => {
+      if (timerInterval) clearInterval(timerInterval);
+    };
+  });
 
   onMount(async () => {
     try {
@@ -45,9 +55,8 @@
       if (!response.ok) throw new Error('Échec du chargement');
       quizzes = await response.json();
     } catch (err) {
-      console.warn("️ Fallback sur données de démonstration");
-      // ✅ CORRECTION : correct_answer est maintenant un nombre pour éviter les bugs de type
-         // Données mock - Quiz Algorithmique (10 questions)
+      console.warn("⚠️ Fallback sur données de démonstration");
+      // Données mock - Quiz Algorithmique (10 questions)
       quizzes = [
         {
           id: 'quiz_algo_fondamentale',
@@ -73,6 +82,68 @@
     }
   }
 
+  // === FONCTIONS DU TIMER ===
+  function startTimer(minutes: number) {
+    timeRemaining = minutes * 60;
+    isTimerRunning = true;
+    
+    if (timerInterval) clearInterval(timerInterval);
+    
+    timerInterval = setInterval(() => {
+      if (timeRemaining !== null && timeRemaining > 0) {
+        timeRemaining--;
+      } else if (timeRemaining === 0) {
+        // ⏰ Temps écoulé → Auto-soumission
+        clearInterval(timerInterval);
+        isTimerRunning = false;
+        autoSubmitQuiz();
+      }
+    }, 1000);
+  }
+
+  function stopTimer() {
+    if (timerInterval) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+      isTimerRunning = false;
+    }
+  }
+
+  function formatTime(seconds: number): string {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  async function autoSubmitQuiz() {
+    console.log("⏰ Temps écoulé! Soumission automatique...");
+    // Si une réponse est sélectionnée mais pas encore validée, on la valide
+    if (selectedAnswer !== null && !isAnswered) {
+      validateAnswer();
+    }
+    await submitCurrentQuiz();
+  }
+
+  async function submitCurrentQuiz() {
+    if (!activeQuiz) return;
+    
+    try {
+      // Simulation d'appel API (à remplacer par fetch réel si besoin)
+      const result = {
+        score: score,
+        total_questions: activeQuiz.questions.length,
+        feedback: score === activeQuiz.questions.length ? 'Parfait ! 🌟' : score >= activeQuiz.questions.length / 2 ? 'Bon travail ! 👍' : 'Continuez à pratiquer ! 💪'
+      };
+      
+      quizResult = result;
+      quizFinished = true;
+      stopTimer();
+    } catch (err) {
+      console.error("Erreur de soumission:", err);
+    }
+  }
+
+  // === ACTIONS UTILISATEUR ===
   function startQuiz(quiz: any) {
     activeQuiz = { ...quiz };
     currentQuestionIndex = 0;
@@ -80,14 +151,16 @@
     isAnswered = false;
     score = 0;
     quizFinished = false;
-    answers = {}; // Réinitialiser les réponses
-  
-    // Démarrer le timer si un temps limite est défini
+    answers = {};
+    quizResult = null;
+    
+    // 🚀 Démarrer le timer si un temps limite est défini
     if (quiz.time_limit_minutes) {
       startTimer(quiz.time_limit_minutes);
     }
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
+    
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
 
   function backToList() {
     stopTimer();
@@ -96,14 +169,16 @@
   }
 
   function selectAnswer(index: number) {
-    if (!isAnswered) selectedAnswer = index;
+    if (!isAnswered) {
+      selectedAnswer = index;
+      answers[activeQuiz.questions[currentQuestionIndex].id] = index;
+    }
   }
 
   function validateAnswer() {
     if (selectedAnswer === null || isAnswered) return;
     isAnswered = true;
     const q = activeQuiz.questions[currentQuestionIndex];
-    // ✅ Comparaison explicite en nombres
     if (Number(selectedAnswer) === Number(q.correct_answer)) {
       score++;
     }
@@ -116,73 +191,24 @@
       isAnswered = false;
     } else {
       quizFinished = true;
+      stopTimer();
     }
   }
 
   function restartQuiz() {
+    stopTimer();
     activeQuiz = null;
     fetchQuizzes();
   }
-  
-  function startTimer(minutes: number) {
-  timeRemaining = minutes * 60; // Convertir en secondes
-  isTimerRunning = true;
-  
-  if (timerInterval) clearInterval(timerInterval);
-  
-  timerInterval = setInterval(() => {
-    if (timeRemaining !== null && timeRemaining > 0) {
-      timeRemaining--;
-    } else if (timeRemaining === 0) {
-      // Temps écoulé → Auto-soumission
-      clearInterval(timerInterval);
-      isTimerRunning = false;
-      autoSubmitQuiz();
-    }
-  }, 1000);
-}
-
-function stopTimer() {
-  if (timerInterval) {
-    clearInterval(timerInterval);
-    timerInterval = null;
-    isTimerRunning = false;
-  }
-}
-
-function formatTime(seconds: number): string {
-  const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-}
-
-async function autoSubmitQuiz() {
-  console.log("⏰ Temps écoulé! Soumission automatique...");
-  if (selectedAnswer !== null && !isAnswered) {
-    validateAnswer();
-  }
-  await submitCurrentQuiz();
-}
-
-async function submitCurrentQuiz() {
-  if (!activeQuiz) return;
-  
-  try {
-    const result = await submitQuiz({
-      quiz_id: activeQuiz.id,
-      answers: answers
-    });
-    
-    quizResult = result;
-    quizFinished = true;
-    stopTimer();
-  } catch (err) {
-    console.error("Erreur de soumission:", err);
-  }
-}
 </script>
 
-
+<!-- === AFFICHAGE DU TIMER (FIXE EN HAUT À DROITE) === -->
+{#if activeQuiz && !quizFinished && activeQuiz.time_limit_minutes && timeRemaining !== null}
+  <div class="timer-badge" class:warning={timeRemaining < 60}>
+    <span class="timer-icon">⏱️</span>
+    <span class="timer-value">{formatTime(timeRemaining)}</span>
+  </div>
+{/if}
 
 {#if error}
   <div style="margin:4rem 2rem; padding:1.5rem; background:#fef2f2; border:1px solid #fecaca; border-radius:8px; text-align:center;">
@@ -191,21 +217,24 @@ async function submitCurrentQuiz() {
   </div>
 
 {:else if activeQuiz}
+  <!-- 🎮 QUIZ EN COURS -->
   <div style="padding:4rem 2rem 2rem; max-width:800px; margin:0 auto;">
     <button on:click={backToList} style="margin-bottom:1.5rem; color:#3b82f6; background:none; border:none; cursor:pointer; font-weight:500;">← Retour à la liste</button>
 
     {#if quizFinished}
+      <!-- 🏆 RÉSULTATS -->
       <div style="background:#fff; padding:2.5rem; border-radius:12px; box-shadow:0 4px 12px rgba(0,0,0,0.1); text-align:center;">
         <h2 style="margin:0 0 1rem 0; font-size:1.8rem;">🎉 Quiz Terminé !</h2>
         <div style="font-size:3rem; font-weight:bold; color:#3b82f6; margin:1rem 0;">{score} / {activeQuiz.questions.length}</div>
         <p style="color:#6b7280; margin-bottom:2rem;">
-          {score === activeQuiz.questions.length ? 'Parfait ! 🌟' : score >= activeQuiz.questions.length / 2 ? 'Bon travail ! ' : 'Continuez à pratiquer ! '}
+          {score === activeQuiz.questions.length ? 'Parfait ! 🌟' : score >= activeQuiz.questions.length / 2 ? 'Bon travail ! 👍' : 'Continuez à pratiquer ! 💪'}
         </p>
         <button on:click={restartQuiz} style="padding:0.8rem 1.5rem; background:#3b82f6; color:white; border:none; border-radius:8px; cursor:pointer; font-weight:600;">
           Retour aux quiz
         </button>
       </div>
     {:else}
+      <!-- ❓ QUESTION -->
       {@const q = activeQuiz.questions[currentQuestionIndex]}
       <div style="background:#fff; padding:2rem; border-radius:12px; box-shadow:0 4px 6px rgba(0,0,0,0.05); border:1px solid #e5e7eb;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; padding-bottom:1rem; border-bottom:1px solid #e5e7eb;">
@@ -235,9 +264,10 @@ async function submitCurrentQuiz() {
         {#if !isAnswered}
           <button on:click={validateAnswer} disabled={selectedAnswer === null}
             style="width:100%; padding:0.8rem; background:{selectedAnswer === null ? '#9ca3af' : '#3b82f6'}; color:white; border:none; border-radius:8px; cursor:{selectedAnswer === null ? 'not-allowed' : 'pointer'}; font-weight:600; font-size:1rem;">
-             Valider la réponse
+            ✅ Valider la réponse
           </button>
         {:else}
+          <!-- FEEDBACK -->
           <div style="padding:1rem; background:{Number(selectedAnswer) === Number(q.correct_answer) ? '#f0fdf4' : '#fef2f2'}; border:1px solid {Number(selectedAnswer) === Number(q.correct_answer) ? '#bbf7d0' : '#fecaca'}; border-radius:8px; margin-bottom:1rem;">
             <p style="margin:0 0 0.5rem 0; font-weight:600; color:{Number(selectedAnswer) === Number(q.correct_answer) ? '#166534' : '#991b1b'};">
               {Number(selectedAnswer) === Number(q.correct_answer) ? '✅ Bonne réponse !' : '❌ Mauvaise réponse.'}
@@ -257,6 +287,7 @@ async function submitCurrentQuiz() {
   </div>
 
 {:else}
+  <!-- 📋 LISTE DES QUIZ -->
   <div style="padding:4rem 2rem 2rem; max-width:1200px; margin:0 auto;">
     <header style="margin-bottom:2rem;">
       <button on:click={() => goto('/student/dashboard')} style="margin-bottom:1rem; color:#3b82f6; background:none; border:none; cursor:pointer; font-weight:500;">← Retour au Dashboard</button>
@@ -289,3 +320,47 @@ async function submitCurrentQuiz() {
     {/if}
   </div>
 {/if}
+
+<!-- === CSS DU TIMER === -->
+<style>
+  .timer-badge {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: #fff;
+    padding: 0.75rem 1.5rem;
+    border-radius: 9999px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: #1e40af;
+    border: 2px solid #3b82f6;
+    z-index: 1000;
+    transition: all 0.3s ease;
+    animation: slideIn 0.3s ease-out;
+  }
+
+  .timer-badge.warning {
+    background: #fef2f2;
+    color: #dc2626;
+    border-color: #ef4444;
+    animation: pulse 1s infinite;
+  }
+
+  .timer-icon {
+    font-size: 1.3rem;
+  }
+
+  @keyframes slideIn {
+    from { transform: translateX(100px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3); }
+    50% { transform: scale(1.05); box-shadow: 0 6px 20px rgba(239, 68, 68, 0.5); }
+  }
+</style>
