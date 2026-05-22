@@ -9,9 +9,10 @@
 	import Classroom from '$lib/components/icons/Classroom.svelte';
 	import Assignment from '$lib/components/icons/Assignment.svelte';
 	import Message from '$lib/components/icons/Messages.svelte';
+	import QuizIcon from '$lib/components/icons/Quiz.svelte';
+	import ChartBar from '$lib/components/icons/ChartBar.svelte'; // ✅ Nouvelle icône pour les résultats
 	import type { ComponentType } from 'svelte';
 	import { writable, type Writable } from 'svelte/store';
-	import QuizIcon from '$lib/components/icons/Quiz.svelte';  
 	
 	const i18n = getContext('i18n');
 
@@ -61,9 +62,13 @@
 			}
 			
 			// Mark support nav item as active for support pages
-			// Format: /student/support/ID, /student/support/ID/edit, /student/support/create
 			if (pageFromUrl === 'support') {
 				pageFromUrl = 'supports';
+			}
+
+			// ✅ Gérer la page "results"
+			if (pageFromUrl === 'results') {
+				pageFromUrl = 'results';
 			}
 
 			// Update the activePage store if it's a store
@@ -91,9 +96,13 @@
 			}
 			
 			// Mark support nav item as active for support pages
-			// Format: /student/support/ID, /student/support/ID/edit, /student/support/create
 			if (pageFromUrl === 'support') {
 				pageFromUrl = 'supports';
+			}
+
+			// ✅ Gérer la page "results"
+			if (pageFromUrl === 'results') {
+				pageFromUrl = 'results';
 			}
 
 			// Only update if it has changed to avoid loops
@@ -158,6 +167,7 @@
 			{ id: 'supports', label: 'Support', icon: Classroom },
 			{ id: 'assignments', label: 'Assignments', icon: Assignment },
 			{ id: 'quizzes', label: 'Quizzes', icon: QuizIcon },
+			{ id: 'results', label: 'Résultats', icon: ChartBar }, // ✅ Nouveau lien Résultats
 			{ id: 'messages', label: 'Messages', icon: Message },
 			{ id: 'settings', label: 'Profile & Settings', icon: Settings }
 		],

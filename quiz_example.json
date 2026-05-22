@@ -1,0 +1,25 @@
+{
+  "title": "Quiz Introduction à Python",
+  "description": "Testez vos connaissances de base en Python",
+  "subject": "Programmation",
+  "time_limit_minutes": 20,
+  "is_active": true,
+  "questions": [
+    {
+      "text": "Quelle est la sortie de print(2 + 2) ?",
+      "question_type": "multiple_choice",
+      "options": ["3", "4", "5", "Erreur"],
+      "correct_answer": "1",
+      "points": 1,
+      "explanation": "En Python, 2 + 2 retourne 4"
+    },
+    {
+      "text": "Python est un langage compilé.",
+      "question_type": "true_false",
+      "options": ["Vrai", "Faux"],
+      "correct_answer": "1",
+      "points": 1,
+      "explanation": "Python est un langage interprété"
+    }
+  ]
+}
