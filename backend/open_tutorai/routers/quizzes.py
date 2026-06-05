@@ -66,11 +66,11 @@ class QuizResponse(BaseModel):
     subject: str
     time_limit_minutes: Optional[int]
     is_active: bool
-    questions: List[dict] # On retourne les questions telles quelles
+    questions: List[dict]
 
 class QuizSubmission(BaseModel):
     user_id: str
-    answers: dict # {question_id: answer_index_string}
+    answers: dict
 
 class QuizResult(BaseModel):
     submission_id: str
@@ -85,8 +85,41 @@ class QuizResult(BaseModel):
 # AUTH STUB
 # =============================================================================
 async def get_current_user(request: Request):
-    # Retourne un utilisateur fictif pour le développement
     return {"id": "user_demo", "role": "student", "name": "Étudiant Démo"}
+
+# =============================================================================
+# ✅ NOUVELLE FONCTION : Validation des questions 
+# =============================================================================
+
+def _validate_question(question: dict, question_index: int) -> None:
+    """
+    Valide qu'une question a un format correct :
+    - options n'est pas vide
+    - correct_answer est un index valide dans options
+    - correct_answer est un entier ou une string d'entier
+    """
+    options = question.get("options", [])
+    correct_answer = question.get("correct_answer")
+    
+    if not options:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Question #{question_index + 1}: 'options' ne peut pas être vide"
+        )
+    
+    try:
+        correct_idx = int(correct_answer)
+    except (ValueError, TypeError):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Question #{question_index + 1}: 'correct_answer' doit être un index numérique (0, 1, 2...), reçu: {correct_answer}"
+        )
+    
+    if not (0 <= correct_idx < len(options)):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Question #{question_index + 1}: index de 'correct_answer' ({correct_idx}) hors limites pour {len(options)} options"
+        )
 
 # =============================================================================
 # ROUTES STANDARD
@@ -114,6 +147,10 @@ async def create_quiz(
     """Créer un nouveau quiz (Enseignant/Admin uniquement)"""
     if current_user.get("role") not in ["admin", "teacher"]:
         raise HTTPException(status_code=403, detail="Permission refusée")
+    
+    # ✅ Validation de chaque question avant création
+    for idx, q in enumerate(quiz.questions):
+        _validate_question(q.model_dump(), idx)
     
     new_quiz = {
         "id": str(uuid.uuid4()),
@@ -166,7 +203,7 @@ async def submit_quiz(quiz_id: str, payload: QuizSubmission):
     )
 
 # =============================================================================
-# ROUTES D'IMPORT (SPRINT 2)
+# ROUTES D'IMPORT (SPRINT 2) - AVEC VALIDATION RENFORCÉE
 # =============================================================================
 
 @router.post("/import/json")
@@ -182,6 +219,10 @@ async def import_quiz_json(file: UploadFile = File(...), current_user: dict = De
         # Validation basique
         if "title" not in data or "questions" not in data:
             raise HTTPException(status_code=400, detail="Format JSON invalide: champs 'title' et 'questions' requis")
+        
+        #  Validation renforcée de chaque question 
+        for idx, q in enumerate(data["questions"]):
+            _validate_question(q, idx)
             
         # Création du quiz
         new_quiz = {
@@ -193,15 +234,18 @@ async def import_quiz_json(file: UploadFile = File(...), current_user: dict = De
             "is_active": True,
             "created_by": current_user.get("id"),
             "created_at": datetime.now().isoformat(),
-            "questions": data["questions"] # On suppose que le format est bon
+            "questions": data["questions"]
         }
         quizzes_db.append(new_quiz)
         return {"message": "Quiz importé avec succès", "id": new_quiz["id"]}
         
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Fichier JSON corrompu")
+    except HTTPException:
+        # Re-raise les erreurs de validation déjà formatées
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Erreur serveur: {str(e)}")
 
 @router.get("/import/template")
 async def get_import_template():
@@ -215,7 +259,7 @@ async def get_import_template():
             {
                 "text": "Question exemple ?",
                 "options": ["Option A", "Option B", "Option C"],
-                "correct_answer": "0", # Index de la bonne réponse
+                "correct_answer": "0",
                 "points": 1,
                 "explanation": "Explication ici"
             }

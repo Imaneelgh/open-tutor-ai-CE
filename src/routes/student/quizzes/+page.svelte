@@ -2,12 +2,11 @@
   import { goto } from '$app/navigation';
   import { user } from '$lib/stores';
   import { onMount, getContext } from 'svelte';
-
   import { afterNavigate } from '$app/navigation';
+  import { onDestroy } from 'svelte';
 
-// Cette ligne force la page à recharger les quiz à chaque fois que tu changes de page
-afterNavigate(() => fetchQuizzes());
-
+  // Cette ligne force la page à recharger les quiz à chaque fois que tu changes de page
+  afterNavigate(() => fetchQuizzes());
   const i18n = getContext('i18n');
 
   // === ÉTAT GLOBAL ===
@@ -373,45 +372,46 @@ function filterQuizzesByProgress(allQuizzes: any[]) {
 
   // === ACTIONS UTILISATEUR ===
   function startQuiz(quiz: any) {
-    // 🔀 Mélanger les questions ET réorganiser les options de chaque question
-    const shuffledQuestions = shuffleArray(quiz.questions).map(q => {
-      // Sauvegarder la bonne réponse avant le mélange
-      const originalCorrectIndex = parseInt(q.correct_answer);
-      const correctOptionValue = q.options[originalCorrectIndex];
-      
-      // Mélanger les options
-      const newOptions = shuffleArray(q.options);
-      
-      // Retrouver la nouvelle position de la bonne réponse
-      const newCorrectIndex = newOptions.indexOf(correctOptionValue);
-      
-      return {
-        ...q,
-        options: newOptions,
-        correct_answer: newCorrectIndex.toString() // ✅ Index mis à jour dynamiquement
-      };
-    });
+  //  1. NETTOYAGE RADICAL (empêche les timers fantômes)
+  stopTimer();
+  if (activeQuiz?.id) localStorage.removeItem(`timer_${activeQuiz.id}`);
+  if (quiz?.id) localStorage.removeItem(`timer_${quiz.id}`);
 
-    // Initialiser le quiz avec les données mélangées
-    activeQuiz = { ...quiz, questions: shuffledQuestions };
-    currentQuestionIndex = 0;
-    selectedAnswer = null;
-    isAnswered = false;
-    score = 0;
-    quizFinished = false;
-    answers = {};
-    quizResult = null;
-    
-    // Restaurer timer si besoin
-    const restored = restoreTimerIfNeeded(quiz);
-    
-    // Nouveau timer seulement si pas de restauration
-    if (!restored && quiz.time_limit_minutes) {
-      startTimer(quiz.time_limit_minutes);
-    }
-    
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+  // 🔄 2. RESET COMPLET des variables d'état
+  timeRemaining = null;
+  totalTime = null;
+  isTimerRunning = false;
+  isTimerPaused = false;
+  hasWarned5min = false;
+  hasWarned2min = false;
+  hasWarned1min = false;
+
+  // 🔀 3. MÉLANGE ALÉATOIRE (Fisher-Yates)
+  const shuffledQuestions = shuffleArray(quiz.questions).map(q => {
+    const originalCorrectIndex = parseInt(q.correct_answer);
+    const correctOptionValue = q.options[originalCorrectIndex];
+    const newOptions = shuffleArray(q.options);
+    const newCorrectIndex = newOptions.indexOf(correctOptionValue);
+    return { ...q, options: newOptions, correct_answer: newCorrectIndex.toString() };
+  });
+
+  // 📦 4. INITIALISATION DU QUIZ
+  activeQuiz = { ...quiz, questions: shuffledQuestions };
+  currentQuestionIndex = 0;
+  selectedAnswer = null;
+  isAnswered = false;
+  score = 0;
+  quizFinished = false;
+  answers = {};
+  quizResult = null;
+
+  // ️ 5. LANCEMENT DU TIMER FRAIS (sans restauration)
+  if (quiz.time_limit_minutes) {
+    startTimer(quiz.time_limit_minutes);
   }
+
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
 
   function backToList() {
     stopTimer();
@@ -457,8 +457,17 @@ function filterQuizzesByProgress(allQuizzes: any[]) {
     if (activeQuiz?.id) {
       localStorage.removeItem(`timer_${activeQuiz.id}`);
     }
-    activeQuiz = null;
-    fetchQuizzes();
+    // Réinitialise TOUT l'état avant de relancer
+    currentQuestionIndex = 0;
+    selectedAnswer = null;
+    isAnswered = false;
+    score = 0;
+    quizFinished = false;
+    answers = {};
+    quizResult = null;
+    
+    // Relance le quiz avec nouveau mélange + timer frais
+    startQuiz(activeQuiz);
   }
 
   async function autoSubmitQuiz() {
@@ -488,6 +497,10 @@ function filterQuizzesByProgress(allQuizzes: any[]) {
       console.error("Erreur de soumission:", err);
     }
   }
+  onDestroy(() => {
+    if (timerInterval) clearInterval(timerInterval);
+    if (audioContext) audioContext.close();
+  });
 </script>
 
 <!-- === TIMER BADGE + PROGRESS + PAUSE (CENTRÉS & AGRANDIS) === -->
