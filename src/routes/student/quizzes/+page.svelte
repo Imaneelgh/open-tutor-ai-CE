@@ -3,6 +3,11 @@
   import { user } from '$lib/stores';
   import { onMount, getContext } from 'svelte';
 
+  import { afterNavigate } from '$app/navigation';
+
+// Cette ligne force la page à recharger les quiz à chaque fois que tu changes de page
+afterNavigate(() => fetchQuizzes());
+
   const i18n = getContext('i18n');
 
   // === ÉTAT GLOBAL ===
@@ -59,61 +64,112 @@
   });
 
   async function fetchQuizzes() {
-    try {
-      const response = await fetch(`${API_BASE}/api/v1/quizzes`, {
-        headers: { 'Authorization': `Bearer ${$user?.token}` }
-      });
-      if (!response.ok) throw new Error('Échec du chargement');
-      quizzes = await response.json();
-    } catch (err) {
-      console.warn("⚠️ Fallback sur données de démonstration");
-quizzes = [
-  // === QUIZ 1 : Algorithmique Fondamentale (existant) ===
-  {
-    id: 'quiz_algo_fondamentale',
-    title: 'Quiz Algorithmique Fondamentale',
-    description: 'Testez vos connaissances sur les structures de données, la complexité et les algorithmes classiques.',
-    subject: 'Algorithmique',
-    questions: [
-      { id: 'q1', text: 'Qu\'est-ce qu\'un algorithme ?', question_type: 'multiple_choice', options: ['Un langage de programmation', 'Une suite finie et ordonnée d\'instructions pour résoudre un problème', 'Un type de base de données', 'Un système d\'exploitation'], correct_answer: 1, points: 1, explanation: 'Un algorithme est une séquence logique et finie d\'étapes permettant de résoudre un problème ou d\'effectuer un calcul.' },
-      { id: 'q2', text: 'Quelle notation décrit la complexité temporelle dans le pire des cas ?', question_type: 'multiple_choice', options: ['Notation Omega (Ω)', 'Notation Theta (Θ)', 'Notation Big O (O)', 'Notation Sigma (Σ)'], correct_answer: 2, points: 1, explanation: 'La notation Big O (O) décrit la borne supérieure de la complexité, c\'est-à-dire le scénario le plus défavorable.' },
-      { id: 'q3', text: 'Quelle structure de données fonctionne selon le principe LIFO ?', question_type: 'multiple_choice', options: ['File (Queue)', 'Tableau (Array)', 'Pile (Stack)', 'Liste chaînée'], correct_answer: 2, points: 1, explanation: 'La Pile (Stack) suit le principe LIFO : le dernier élément ajouté est le premier à être retiré.' },
-      { id: 'q4', text: 'Quelle est la complexité moyenne du tri rapide (QuickSort) ?', question_type: 'multiple_choice', options: ['O(n)', 'O(n log n)', 'O(n²)', 'O(log n)'], correct_answer: 1, points: 1, explanation: 'QuickSort a une complexité moyenne de O(n log n), bien qu\'il puisse atteindre O(n²) dans le pire des cas.' },
-      { id: 'q5', text: 'Dans quel cas la recherche dichotomique est-elle applicable ?', question_type: 'multiple_choice', options: ['Sur un tableau trié', 'Sur un tableau non trié', 'Sur une liste chaînée uniquement', 'Sur n\'importe quelle structure'], correct_answer: 0, points: 1, explanation: 'La recherche dichotomique nécessite que les données soient préalablement triées pour fonctionner en O(log n).' },
-      { id: 'q6', text: 'Qu\'est-ce qu\'une fonction récursive ?', question_type: 'multiple_choice', options: ['Une fonction qui s\'appelle elle-même', 'Une fonction qui retourne toujours 0', 'Une fonction sans paramètres', 'Une fonction appelée uniquement depuis le main'], correct_answer: 0, points: 1, explanation: 'La récursivité est une technique où une fonction s\'appelle elle-même pour résoudre des sous-problèmes plus petits.' },
-      { id: 'q7', text: 'Quel algorithme trouve le plus court chemin dans un graphe sans arêtes négatives ?', question_type: 'multiple_choice', options: ['Algorithme de Kruskal', 'Algorithme de Dijkstra', 'Algorithme de Prim', 'Parcours en profondeur (DFS)'], correct_answer: 1, points: 1, explanation: 'L\'algorithme de Dijkstra est spécialisé dans la recherche du plus court chemin à partir d\'une source unique.' },
-      { id: 'q8', text: 'Quel est le principe fondamental de la programmation dynamique ?', question_type: 'multiple_choice', options: ['Utiliser uniquement des boucles', 'Stocker les résultats intermédiaires pour éviter les recalculs', 'Diviser pour régner sans mémoïsation', 'Utiliser des pointeurs uniquement'], correct_answer: 1, points: 1, explanation: 'La programmation dynamique optimise les solutions en mémorisant les résultats des sous-problèmes déjà résolus.' },
-      { id: 'q9', text: 'Quelle est la complexité spatiale d\'un algorithme utilisant un tableau auxiliaire de taille n ?', question_type: 'multiple_choice', options: ['O(1)', 'O(log n)', 'O(n)', 'O(n²)'], correct_answer: 2, points: 1, explanation: 'Utiliser un tableau de taille n implique une consommation mémoire linéaire, notée O(n).' },
-      { id: 'q10', text: 'Que mesure la complexité algorithmique ?', question_type: 'multiple_choice', options: ['Le nombre de lignes de code', 'La quantité de ressources (temps/mémoire) nécessaires à l\'exécution', 'Le nombre de fonctions utilisées', 'La difficulté de lecture du code'], correct_answer: 1, points: 1, explanation: 'La complexité algorithmique évalue l\'efficacité d\'un algorithme en termes de temps d\'exécution et d\'espace mémoire requis.' }
-    ],
-    time_limit_minutes: 7,
-    is_active: true
-  },
+  try {
+    const response = await fetch(`${API_BASE}/api/v1/quizzes`, {
+      headers: { 'Authorization': `Bearer ${$user?.token}` }
+    });
+    if (!response.ok) throw new Error('Échec du chargement');
+    const allQuizzes = await response.json();
+    quizzes = addStatusToQuizzes(allQuizzes);
+    
+  } catch (err) {
+    console.warn("⚠️ Fallback sur données de démonstration");
+    const allQuizzes = [
+      {
+        id: 'quiz_algo_fondamentale',
+        title: 'Quiz Algorithmique Fondamentale',
+        description: 'Testez vos connaissances sur les structures de données, la complexité et les algorithmes classiques.',
+        subject: 'Algorithmique',
+        questions: [
+          { id: 'q1', text: 'Qu\'est-ce qu\'un algorithme ?', question_type: 'multiple_choice', options: ['Un langage de programmation', 'Une suite finie et ordonnée d\'instructions pour résoudre un problème', 'Un type de base de données', 'Un système d\'exploitation'], correct_answer: 1, points: 1, explanation: 'Un algorithme est une séquence logique et finie d\'étapes permettant de résoudre un problème ou d\'effectuer un calcul.' },
+          { id: 'q2', text: 'Quelle notation décrit la complexité temporelle dans le pire des cas ?', question_type: 'multiple_choice', options: ['Notation Omega (Ω)', 'Notation Theta (Θ)', 'Notation Big O (O)', 'Notation Sigma (Σ)'], correct_answer: 2, points: 1, explanation: 'La notation Big O (O) décrit la borne supérieure de la complexité, c\'est-à-dire le scénario le plus défavorable.' },
+          { id: 'q3', text: 'Quelle structure de données fonctionne selon le principe LIFO ?', question_type: 'multiple_choice', options: ['File (Queue)', 'Tableau (Array)', 'Pile (Stack)', 'Liste chaînée'], correct_answer: 2, points: 1, explanation: 'La Pile (Stack) suit le principe LIFO : le dernier élément ajouté est le premier à être retiré.' },
+          { id: 'q4', text: 'Quelle est la complexité moyenne du tri rapide (QuickSort) ?', question_type: 'multiple_choice', options: ['O(n)', 'O(n log n)', 'O(n²)', 'O(log n)'], correct_answer: 1, points: 1, explanation: 'QuickSort a une complexité moyenne de O(n log n), bien qu\'il puisse atteindre O(n²) dans le pire des cas.' },
+          { id: 'q5', text: 'Dans quel cas la recherche dichotomique est-elle applicable ?', question_type: 'multiple_choice', options: ['Sur un tableau trié', 'Sur un tableau non trié', 'Sur une liste chaînée uniquement', 'Sur n\'importe quelle structure'], correct_answer: 0, points: 1, explanation: 'La recherche dichotomique nécessite que les données soient préalablement triées pour fonctionner en O(log n).' },
+          { id: 'q6', text: 'Qu\'est-ce qu\'une fonction récursive ?', question_type: 'multiple_choice', options: ['Une fonction qui s\'appelle elle-même', 'Une fonction qui retourne toujours 0', 'Une fonction sans paramètres', 'Une fonction appelée uniquement depuis le main'], correct_answer: 0, points: 1, explanation: 'La récursivité est une technique où une fonction s\'appelle elle-même pour résoudre des sous-problèmes plus petits.' },
+          { id: 'q7', text: 'Quel algorithme trouve le plus court chemin dans un graphe sans arêtes négatives ?', question_type: 'multiple_choice', options: ['Algorithme de Kruskal', 'Algorithme de Dijkstra', 'Algorithme de Prim', 'Parcours en profondeur (DFS)'], correct_answer: 1, points: 1, explanation: 'L\'algorithme de Dijkstra est spécialisé dans la recherche du plus court chemin à partir d\'une source unique.' },
+          { id: 'q8', text: 'Quel est le principe fondamental de la programmation dynamique ?', question_type: 'multiple_choice', options: ['Utiliser uniquement des boucles', 'Stocker les résultats intermédiaires pour éviter les recalculs', 'Diviser pour régner sans mémoïsation', 'Utiliser des pointeurs uniquement'], correct_answer: 1, points: 1, explanation: 'La programmation dynamique optimise les solutions en mémorisant les résultats des sous-problèmes déjà résolus.' },
+          { id: 'q9', text: 'Quelle est la complexité spatiale d\'un algorithme utilisant un tableau auxiliaire de taille n ?', question_type: 'multiple_choice', options: ['O(1)', 'O(log n)', 'O(n)', 'O(n²)'], correct_answer: 2, points: 1, explanation: 'Utiliser un tableau de taille n implique une consommation mémoire linéaire, notée O(n).' },
+          { id: 'q10', text: 'Que mesure la complexité algorithmique ?', question_type: 'multiple_choice', options: ['Le nombre de lignes de code', 'La quantité de ressources (temps/mémoire) nécessaires à l\'exécution', 'Le nombre de fonctions utilisées', 'La difficulté de lecture du code'], correct_answer: 1, points: 1, explanation: 'La complexité algorithmique évalue l\'efficacité d\'un algorithme en termes de temps d\'exécution et d\'espace mémoire requis.' }
+        ],
+        time_limit_minutes: 7,
+        is_active: true
+      },
+      {
+        id: 'quiz_structures_donnees',
+        title: 'Quiz Structures de Données',
+        description: 'Maîtrisez les tableaux, listes, piles, files, arbres et graphes : concepts, opérations et cas d\'usage.',
+        subject: 'Algorithmique',
+        questions: [
+          { id: 's1', text: 'Quelle structure permet un accès direct à un élément par son index ?', question_type: 'multiple_choice', options: ['Liste chaînée', 'Tableau (Array)', 'Pile (Stack)', 'File (Queue)'], correct_answer: 1, points: 1, explanation: 'Les tableaux permettent un accès en O(1) via l\'index, contrairement aux listes chaînées.' },
+          { id: 's2', text: 'Dans une liste chaînée simple, chaque nœud contient :', question_type: 'multiple_choice', options: ['Uniquement une valeur', 'Une valeur et un pointeur vers le nœud suivant', 'Une valeur et deux pointeurs', 'Uniquement un pointeur'], correct_answer: 1, points: 1, explanation: 'Un nœud de liste chaînée simple stocke la donnée et un pointeur vers le prochain nœud.' },
+          { id: 's3', text: 'Quelle opération est O(1) sur une pile (Stack) ?', question_type: 'multiple_choice', options: ['Accès au milieu', 'Suppression du premier élément', 'Push/Pop en haut de pile', 'Recherche d\'un élément'], correct_answer: 2, points: 1, explanation: 'Push (ajout) et Pop (retrait) se font en O(1) uniquement au sommet de la pile.' },
+          { id: 's4', text: 'Quelle structure suit le principe FIFO (First In, First Out) ?', question_type: 'multiple_choice', options: ['Pile (Stack)', 'File (Queue)', 'Arbre binaire', 'Table de hachage'], correct_answer: 1, points: 1, explanation: 'La File (Queue) respecte l\'ordre d\'arrivée : premier entré, premier sorti.' },
+          { id: 's5', text: 'Dans un arbre binaire de recherche (BST), pour tout nœud :', question_type: 'multiple_choice', options: ['Les fils sont toujours plus grands', 'Le fils gauche < nœud < fils droit', 'Les fils sont toujours plus petits', 'Aucune règle particulière'], correct_answer: 1, points: 1, explanation: 'Le BST organise les valeurs : gauche < racine < droite, permettant une recherche efficace.' },
+          { id: 's6', text: 'Quelle est la complexité d\'une recherche dans une table de hachage idéale ?', question_type: 'multiple_choice', options: ['O(n)', 'O(log n)', 'O(1)', 'O(n²)'], correct_answer: 2, points: 1, explanation: 'Avec une bonne fonction de hachage et peu de collisions, l\'accès est constant O(1).' },
+          { id: 's7', text: 'Quel parcours d\'arbre visite la racine en premier ?', question_type: 'multiple_choice', options: ['In-order', 'Post-order', 'Pre-order', 'Level-order'], correct_answer: 2, points: 1, explanation: 'Le parcours Pre-order (préfixe) visite : Racine → Gauche → Droite.' },
+          { id: 's8', text: 'Dans un graphe, qu\'est-ce qu\'une arête (edge) ?', question_type: 'multiple_choice', options: ['Un nœud terminal', 'Une connexion entre deux sommets', 'Un chemin cyclique', 'Une valeur pondérée'], correct_answer: 1, points: 1, explanation: 'Une arête relie deux sommets (nodes) et peut être orientée ou non, pondérée ou non.' },
+          { id: 's9', text: 'Quelle structure est optimale pour implémenter une fonction "undo" (annuler) ?', question_type: 'multiple_choice', options: ['File (Queue)', 'Table de hachage', 'Pile (Stack)', 'Arbre AVL'], correct_answer: 2, points: 1, explanation: 'La pile permet d\'annuler dans l\'ordre inverse des actions : dernier ajouté, premier retiré (LIFO).' },
+          { id: 's10', text: 'Quel algorithme de parcours utilise une file (Queue) ?', question_type: 'multiple_choice', options: ['DFS (Depth-First Search)', 'BFS (Breadth-First Search)', 'Tri topologique', 'Backtracking'], correct_answer: 1, points: 1, explanation: 'Le BFS explore niveau par niveau en utilisant une file pour gérer l\'ordre de visite.' }
+        ],
+        time_limit_minutes: 7,
+        is_active: true
+      }
+    ];
+    quizzes = addStatusToQuizzes(allQuizzes);
+  }
+}
 
-  // === QUIZ 2 : Structures de Données (NOUVEAU) ===
-  {
-    id: 'quiz_structures_donnees',
-    title: 'Quiz Structures de Données',
-    description: 'Maîtrisez les tableaux, listes, piles, files, arbres et graphes : concepts, opérations et cas d\'usage.',
-    subject: 'Algorithmique',
-    questions: [
-      { id: 's1', text: 'Quelle structure permet un accès direct à un élément par son index ?', question_type: 'multiple_choice', options: ['Liste chaînée', 'Tableau (Array)', 'Pile (Stack)', 'File (Queue)'], correct_answer: 1, points: 1, explanation: 'Les tableaux permettent un accès en O(1) via l\'index, contrairement aux listes chaînées.' },
-      { id: 's2', text: 'Dans une liste chaînée simple, chaque nœud contient :', question_type: 'multiple_choice', options: ['Uniquement une valeur', 'Une valeur et un pointeur vers le nœud suivant', 'Une valeur et deux pointeurs', 'Uniquement un pointeur'], correct_answer: 1, points: 1, explanation: 'Un nœud de liste chaînée simple stocke la donnée et un pointeur vers le prochain nœud.' },
-      { id: 's3', text: 'Quelle opération est O(1) sur une pile (Stack) ?', question_type: 'multiple_choice', options: ['Accès au milieu', 'Suppression du premier élément', 'Push/Pop en haut de pile', 'Recherche d\'un élément'], correct_answer: 2, points: 1, explanation: 'Push (ajout) et Pop (retrait) se font en O(1) uniquement au sommet de la pile.' },
-      { id: 's4', text: 'Quelle structure suit le principe FIFO (First In, First Out) ?', question_type: 'multiple_choice', options: ['Pile (Stack)', 'File (Queue)', 'Arbre binaire', 'Table de hachage'], correct_answer: 1, points: 1, explanation: 'La File (Queue) respecte l\'ordre d\'arrivée : premier entré, premier sorti.' },
-      { id: 's5', text: 'Dans un arbre binaire de recherche (BST), pour tout nœud :', question_type: 'multiple_choice', options: ['Les fils sont toujours plus grands', 'Le fils gauche < nœud < fils droit', 'Les fils sont toujours plus petits', 'Aucune règle particulière'], correct_answer: 1, points: 1, explanation: 'Le BST organise les valeurs : gauche < racine < droite, permettant une recherche efficace.' },
-      { id: 's6', text: 'Quelle est la complexité d\'une recherche dans une table de hachage idéale ?', question_type: 'multiple_choice', options: ['O(n)', 'O(log n)', 'O(1)', 'O(n²)'], correct_answer: 2, points: 1, explanation: 'Avec une bonne fonction de hachage et peu de collisions, l\'accès est constant O(1).' },
-      { id: 's7', text: 'Quel parcours d\'arbre visite la racine en premier ?', question_type: 'multiple_choice', options: ['In-order', 'Post-order', 'Pre-order', 'Level-order'], correct_answer: 2, points: 1, explanation: 'Le parcours Pre-order (préfixe) visite : Racine → Gauche → Droite.' },
-      { id: 's8', text: 'Dans un graphe, qu\'est-ce qu\'une arête (edge) ?', question_type: 'multiple_choice', options: ['Un nœud terminal', 'Une connexion entre deux sommets', 'Un chemin cyclique', 'Une valeur pondérée'], correct_answer: 1, points: 1, explanation: 'Une arête relie deux sommets (nodes) et peut être orientée ou non, pondérée ou non.' },
-      { id: 's9', text: 'Quelle structure est optimale pour implémenter une fonction "undo" (annuler) ?', question_type: 'multiple_choice', options: ['File (Queue)', 'Table de hachage', 'Pile (Stack)', 'Arbre AVL'], correct_answer: 2, points: 1, explanation: 'La pile permet d\'annuler dans l\'ordre inverse des actions : dernier ajouté, premier retiré (LIFO).' },
-      { id: 's10', text: 'Quel algorithme de parcours utilise une file (Queue) ?', question_type: 'multiple_choice', options: ['DFS (Depth-First Search)', 'BFS (Breadth-First Search)', 'Tri topologique', 'Backtracking'], correct_answer: 1, points: 1, explanation: 'Le BFS explore niveau par niveau en utilisant une file pour gérer l\'ordre de visite.' }
-    ],
-    time_limit_minutes: 7,
-    is_active: true
-  }
-];
+// === FONCTION QUI CALCULE LE STATUT (✅ ▶️ 🔒) ===
+function addStatusToQuizzes(allQuizzes) {
+  // 1. On lit ce qui est sauvegardé dans le navigateur
+  const saved = JSON.parse(localStorage.getItem('quiz_results') || '[]');
+  console.log("📋 Résultats lus du localStorage:", saved);
+  
+  // 2. On crée une liste rapide des IDs terminés
+  const completedIds = new Set(saved.map(r => r.quizId));
+  
+  // 3. On parcourt chaque quiz pour lui donner un statut
+  return allQuizzes.map((quiz, index) => {
+    let status = 'locked';
+    let score = null;
+
+    if (completedIds.has(quiz.id)) {
+      status = 'completed';
+      const res = saved.find(r => r.quizId === quiz.id);
+      score = (res?.percentage || 0) + '%';
+    } 
+    else if (index === 0 || completedIds.has(allQuizzes[index - 1].id)) {
+      status = 'available';
     }
-  }
+
+    // ✅ Le console.log est MAINTENANT à l'intérieur de la boucle
+    console.log(`📝 Quiz: ${quiz.title}, Status: ${status}, Score: ${score}`);
+
+    return { ...quiz, status, score };
+  });
+}
+
+
+
+// === NOUVELLE FONCTION : Filtrer les quiz selon la progression ===
+function filterQuizzesByProgress(allQuizzes: any[]) {
+  // Lire les résultats sauvegardés
+  const savedResults = JSON.parse(localStorage.getItem('quiz_results') || '[]');
+  
+  // Créer un Set des IDs des quiz terminés
+  const completedIds = new Set(savedResults.map((r: any) => r.quizId));
+  
+  // Filtrer : garder seulement le 1er quiz OU les quiz dont le précédent est terminé
+  return allQuizzes.filter((quiz, index) => {
+    // Le 1er quiz est toujours accessible
+    if (index === 0) return true;
+    
+    // Les autres quiz sont accessibles seulement si le précédent est terminé
+    const previousQuiz = allQuizzes[index - 1];
+    return completedIds.has(previousQuiz.id);
+  });
+}
 
   // === 💾 SAUVEGARDE DES RÉSULTATS (Dashboard) ===
   function saveQuizResult() {
@@ -382,7 +438,7 @@ quizzes = [
     }
   }
 
-  function nextQuestion() {
+    function nextQuestion() {
     if (currentQuestionIndex < activeQuiz.questions.length - 1) {
       currentQuestionIndex++;
       selectedAnswer = null;
@@ -390,6 +446,9 @@ quizzes = [
     } else {
       quizFinished = true;
       stopTimer();
+      
+      // 🪄 C'EST CETTE LIGNE QUI MANQUAIT !
+      submitCurrentQuiz(); 
     }
   }
 
@@ -559,10 +618,19 @@ quizzes = [
               <span>📝 {quiz.questions?.length || 0} questions</span>
               {#if quiz.time_limit_minutes}<span>⏱️ {quiz.time_limit_minutes} min</span>{/if}
             </div>
-            <button on:click={() => startQuiz(quiz)} disabled={!quiz.is_active}
-              style="width:100%; padding:0.75rem; background:{quiz.is_active ? '#3b82f6' : '#9ca3af'}; color:white; border:none; border-radius:8px; cursor:{quiz.is_active ? 'pointer' : 'not-allowed'}; font-weight:600;">
-              {quiz.is_active ? 'Commencer le Quiz' : 'Indisponible'}
-            </button>
+           <button 
+  on:click={() => quiz.status !== 'locked' && startQuiz(quiz)}
+  disabled={quiz.status === 'locked'}
+  style="width:100%; padding:0.75rem; color:white; border:none; border-radius:8px; font-weight:600; cursor: {quiz.status === 'locked' ? 'not-allowed' : 'pointer'}; background: {quiz.status === 'completed' ? '#10b981' : quiz.status === 'available' ? '#3b82f6' : '#9ca3af'};">
+  
+  {#if quiz.status === 'completed'}
+    ✅ Terminé ({quiz.score})
+  {:else if quiz.status === 'available'}
+    ▶️ Commencer
+  {:else}
+    🔒 Verrouillé
+  {/if}
+</button>
           </div>
         {/each}
       </div>

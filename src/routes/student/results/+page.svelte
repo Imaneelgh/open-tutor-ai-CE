@@ -3,6 +3,7 @@
   import { goto } from '$app/navigation';
   import { user } from '$lib/stores';
   import { onMount } from 'svelte';
+  import QuizProgress from './QuizProgress.svelte'; 
 
   let results: any[] = [];
   let stats = { total: 0, avgScore: 0, bestScore: 0, lastDate: '-' };
@@ -85,6 +86,7 @@
     return colors[subject] || 'bg-gray-100 text-gray-800';
   }
 </script>
+<QuizProgress />
 
 <div style="padding: 4rem 2rem 2rem; max-width: 1100px; margin: 0 auto;">
   <!-- Bouton retour -->
