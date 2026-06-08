@@ -1,0 +1,235 @@
+# Migration from OpenWebUI-Based Backend to Root-Driven Architecture
+
+## Overview
+
+OpenTutorAI has been restructured from a nested `backend/open_tutorai/gateway/` hierarchy with OpenWebUI dependencies to a **root-driven, capability-based architecture** following patterns from Hermes.
+
+## Key Changes
+
+### File Structure
+
+**Before:**
+```
+backend/
+  main.py                    ← Mounted entire OpenWebUI
+  open_tutorai/
+    main.py
+    config.py
+    models/
+      database.py
+    routers/
+      auths.py
+      supports.py
+      response_feedbacks.py
+  routers/
+    auths.py
+    supports.py
+    response_feedbacks.py
+  models/
+    database.py
+  config/
+    config.py
+```
+
+**After:**
+```
+main.py                        ← Uvicorn entry point; console script open-tutorai = "main:main"
+config/
+  settings.py
+common/
+  exceptions.py
+  logging.py
+gateway/
+  http/
+    app.py                     ← lifespan, CORS, SPA mount, router registration
+    dependencies.py            ← auth guard + service factories
+    routers/
+      health.py
+      auth.py                  ← /auths/* (root) + /api/v1/auths/* (versioned)
+      supports.py              ← /api/v1/supports/*
+      self_regulation.py       ← /api/v1/self_regulation/*
+      files.py                 ← /api/v1/files/*
+data/
+  database.py
+  models/
+    user.py
+    support.py                 ← SupportFile included
+    feedback.py
+    file.py                    ← FileRecord (generic file uploads)
+  repositories/
+    base.py
+identity/                      ← IdentityService, UserRepository
+learning/
+  supports/                    ← SupportsService, SupportRepository
+self_regulation/               ← SelfRegulationService, FeedbackRepository
+files/                         ← FilesService, FileRepository
+llm/                           ← transport base (OpenAI, Gemini, Ollama — foundation)
+providers/                     ← provider registry (foundation)
+  profiles.py                ← ProviderProfile dataclass + REGISTRY
+  config_service.py          ← AppConfig-backed config CRUD
+  proxy.py                   ← Unified async httpx helpers (proxy_json, proxy_stream)
+  service.py                 ← ProvidersService + model-list TTL cache
+  ollama_native.py           ← Isolated Ollama model-management adapter
+realtime/
+  socket.py                  ← Socket.IO AsyncServer + JWT auth; mounted at /realtime
+var/                           ← runtime only, gitignored: tutorai.db, uploads/, vector_db/
+ui/build/                      ← SvelteKit build output, served as SPA by gateway
+```
+
+### Dependency Changes
+
+**Removed:**
+- `open_webui` runtime dependency
+- All imports from `open_webui.models`, `open_webui.routers`, `open_webui.utils`
+- `open_webui` patches and configuration
+
+**Added:**
+- `fastapi`, `sqlalchemy`, `pydantic` (now explicit)
+- `pyjwt`, `passlib`, `bcrypt` (for auth)
+
+### API Endpoint Changes — OpenTutorAI Public Contract
+
+Routes are grouped by domain. All versioned routes are under `/api/v1/*`. Auth is mounted
+at two prefixes to match the UI's `TUTOR_BASE_URL` / `TUTOR_API_BASE_URL` split.
+
+| Domain | Routes | Notes |
+|--------|--------|-------|
+| `health` | `GET /health` | No version prefix. Docker healthcheck. |
+| `identity (auth)` | `POST /auths/signup`, `GET /auths/user-count` | Root mount — `TUTOR_BASE_URL` |
+| `identity (auth)` | `POST /api/v1/auths/signin`, `GET /api/v1/auths/`, `GET /api/v1/auths/signout` | `/api/v1` mount |
+| `platform` | `GET /api/v1/platform/version\|changelog\|banners` | Version, changelog, UI banners |
+| `users` | `GET /api/v1/users/`, `GET/POST /api/v1/users/user/settings\|info`, `POST /api/v1/users/update/role`, `GET/POST/{id} DELETE/{id}` | User management (admin-gated list/role/delete) |
+| `configs` | `GET/POST /api/v1/configs/models\|banners\|suggestions\|...`, `GET /api/v1/configs/export`, `POST /api/v1/configs/import` | App-level KV config (writes admin-gated) |
+| `models` | `GET /api/v1/models/`, `POST /api/v1/models/create`, `GET/POST/DELETE /api/v1/models/model?id=`, `POST /api/v1/models/model/toggle` | Model overlays (ownership-gated mutations) |
+| `providers (OpenAI)` | `GET/POST /api/v1/providers/openai/config\|urls\|keys\|verify`, `GET /api/v1/providers/openai/models[/{idx}]`, `POST /api/v1/providers/openai/chat/completions`, `POST /api/v1/providers/openai/audio/speech` | Hermes-style core; model-list TTL cache; admin config, non-admin proxy |
+| `providers (Ollama)` | `GET/POST /api/v1/providers/ollama/config\|urls\|verify`, `GET /api/v1/providers/ollama/api/version[/{idx}]`, `GET /api/v1/providers/ollama/api/tags[/{idx}]`, `POST /api/v1/providers/ollama/api/generate\|embeddings\|chat`, `POST/DELETE /api/v1/providers/ollama/api/pull\|create\|delete[/{idx}]`, `POST /api/v1/providers/ollama/models/download\|upload[/{idx}]` | Native Ollama adapter isolated; model-mgmt admin-only |
+| `chats` | `GET/POST/DELETE /api/v1/chats/*` | Full chat CRUD + archive/pin/share/tags/folder/search/clone |
+| `supports` | `POST /api/v1/supports/create`, `POST /api/v1/supports/upload-file`, `GET /api/v1/supports/list[?status=]`, `GET/PATCH/DELETE /api/v1/supports/{id}`, `PATCH /api/v1/supports/{id}/update-chat` | Tutoring support requests |
+| `self_regulation` | `GET/POST /api/v1/self_regulation/config\|feedback`, `GET /api/v1/self_regulation/feedbacks/all[/export]`, `GET/DELETE /api/v1/self_regulation/feedback/{id}` | HITL feedback (`response-feedback[s]` CC aliases retained) |
+| `files` | `POST /api/v1/files/`, `GET /api/v1/files/`, `GET /api/v1/files/all`, `GET/DELETE /api/v1/files/{id}`, `GET /api/v1/files/{id}/content` | Owned file upload |
+| `realtime` | Socket.IO ASGI sub-app at `/realtime/socket.io` | JWT auth on connect; replaces `/ws/socket.io` |
+
+**Removed (forbidden namespaces):**
+
+| Old path | Replaced by |
+|----------|-------------|
+| `/openai/*` | `/api/v1/providers/openai/*` |
+| `/ollama/*` | `/api/v1/providers/ollama/*` |
+| `/api/chat/*` | `/api/v1/chats/*` or `/api/v1/providers/*/chat/completions` |
+| `/ws/socket.io` | `/realtime/socket.io` |
+| `WEBUI_SECRET_KEY` | `SECRET_KEY` |
+
+### Database Model Changes
+
+**User Model**
+- Moved from `open_webui.models.users` to `data.models.user.User`
+- Added `profile_image_url`, `created_at`, `updated_at` fields
+- Uses direct SQLAlchemy (no open_webui Base)
+
+**Support Model**
+- Moved from custom location to `data.models.support.Support`
+- Rich schema aligned with UI: `subject`, `short_description`, `learning_type`, `level`,
+  `content_language`, `access_type`, `keywords` (comma-separated), `chat_id`, `avatar_id`, …
+- Status: `pending` (default), no hard constraint on values
+- `SupportFile` model added for upload attachments (ownership validated in `SupportsService`)
+
+**Feedback Model**
+- Moved from `open_webui.models.feedbacks` to `data.models.feedback.Feedback`
+- Renamed context: "response_feedbacks" → "self_regulation"
+- Maintains backward compatibility with response tracking
+
+### Configuration
+
+Environment variables moved from various sources to unified `config/settings.py`:
+
+```env
+# Database (now SQLite by default — runtime file in var/, not tracked by Git)
+DATABASE_URL=sqlite:///./var/tutorai.db
+
+# Auth (JWT instead of open_webui tokens)
+SECRET_KEY=your-secret-key
+JWT_EXPIRATION_HOURS=24
+
+# CORS (direct config, no open_webui dependency)
+CORS_ALLOW_ORIGIN=http://localhost:3000,http://localhost:5173
+```
+
+### Running the Application
+
+**Before:**
+```bash
+cd backend
+uvicorn backend.main:app --reload
+```
+
+**After:**
+```bash
+uvicorn main:app --reload
+# or
+python main.py
+```
+
+## Migration Checklist
+
+- [x] Extract configuration to root-level `config/` module
+- [x] Create independent database models (User, Support, Feedback)
+- [x] Implement repository pattern for data access
+- [x] Create domain services (IdentityService, SupportsService, SelfRegulationService)
+- [x] Create HTTP gateway with dependency injection
+- [x] Implement JWT authentication (replace open_webui auth)
+- [x] Create API routers for each domain
+- [x] Remove backend/ directory
+- [x] Update project dependencies (remove open-webui)
+- [x] Add test suite
+- [x] Verify all imports clean of open_webui/backend references
+- [x] Implement full provider surface (OpenAI + Ollama — config/proxy/discovery/model-mgmt)
+- [x] Socket.IO ASGI sub-mount at /realtime/socket.io
+- [x] Repoint UI base-URL constants to /api/v1/providers/* and /realtime/socket.io
+- [x] Replace hardcoded contract test with UI-scanner (test_contract_coverage.py)
+
+## Current Status
+
+The root-driven structure is complete and fully operational:
+
+- **137 tests passing** across all domains (auth, users, configs, models, providers, chats, realtime, files, supports, self_regulation)
+- All provider endpoints implemented — Hermes-style unified proxy core + OpenWebUI-compatible shim matching the full UI contract (~25 endpoints per provider)
+- Socket.IO realtime layer mounted at `/realtime/socket.io`; UI repointed
+- Contract test dynamically scans `ui/src/lib/apis/**/*.ts` to verify backend coverage; no hardcoded paths
+- Service/repository separation applied throughout — routers contain no ORM access
+- Single Docker image (multi-stage: Node build → Python serve)
+- Runtime data isolated to `var/` (gitignored)
+
+## Future Steps — Agentic Phase
+
+The architecture follows the Hermes pattern intentionally:
+
+1. **Agent Framework** — root-level `agent/` module when agentic phase begins
+2. **LLM Integration** — `providers/proxy.py` unified transport is the foundation; add multi-provider routing via `ProviderProfile.transport` field
+3. **Provider Registry** — `providers/profiles.py` ready to add new providers (one dict entry each)
+4. **Vector Storage** — `var/vector_db/` runtime path; `vector/` domain module wraps it
+5. **MCP / Tool Use** — follows Hermes `tools/` pattern
+
+## Database Migration
+
+If upgrading from previous OpenTutorAI installation:
+
+1. Export existing data from old database
+2. Run new application to create fresh schema
+3. Import data into new models (schema may differ)
+4. Verify data integrity
+
+## Known Differences
+
+1. **Authentication**: Now uses JWT tokens instead of open_webui session tokens
+2. **Database**: Default to SQLite instead of PostgreSQL (configurable)
+3. **Feedback naming**: "response_feedbacks" → "self_regulation" for domain clarity
+4. **UI serving**: `gateway.http.app` mounts `ui/build/` as a SPA via `SPAStaticFiles` when the
+   directory exists (production/Docker). In local dev the build is absent and the backend serves
+   API only; the SvelteKit dev server runs independently on port 5173.
+
+## Support
+
+For questions or issues with the migration:
+- Check `TROUBLESHOOTING.md`
+- Review specific module `__init__.py` files for available exports
+- Ensure all dependencies in `requirements.txt` are installed

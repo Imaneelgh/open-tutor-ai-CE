@@ -31,7 +31,7 @@ For more information, be sure to check out our [Open TutorAI Documentation](http
 
 ## ⭐ Key Features of Open TutorAI
 
-Open TutorAI-CE is packed with powerful features designed for educational and collaborative AI experiences. Here’s what makes it stand out:
+Open TutorAI-CE is packed with powerful features designed for educational and collaborative AI experiences. Here's what makes it stand out:
 
 - 🚀 **Effortless Setup with Docker**  
   Set up your environment in minutes using Docker with support for `:ollama` and `:cuda` tagged images, ensuring a streamlined and hassle-free deployment.
@@ -86,8 +86,11 @@ Don't forget to explore our sibling project, [Open TutorAI Community](https://di
 
 Below is a list of essential steps and resources to help you get started, manage, and develop with Open TutorAI.
 
-### 🛠️ Setup Guide
-Follow these steps to set up the project locally:
+### 🛠️ Setup Guide — Local Development (without Docker)
+
+Use this path when you want hot-reload for active development or contribution.
+
+**Requirements:** Python 3.11–3.12 · Node.js 18.13–22.x
 
 1. **Fork and Clone the Repository**
    - Go to [GitHub Repository](https://github.com/Open-TutorAi/open-tutor-ai-CE)
@@ -98,44 +101,69 @@ Follow these steps to set up the project locally:
      ```
 
 2. **Backend Setup**
-   - Navigate to the backend folder:
+   - Create and activate a Python environment (conda or venv):
      ```bash
-     cd backend
-     ```
-   - Create and activate a new Conda environment:
-     ```bash
+     # conda
      conda create -n tutorai-env python=3.11
      conda activate tutorai-env
+
+     # or plain venv
+     python3 -m venv .venv && source .venv/bin/activate
      ```
    - Install the required packages:
      ```bash
      pip install -r requirements.txt
      ```
-
-   - For development:
+   - Copy and configure environment variables:
      ```bash
-     ./dev.sh
+     cp .env.example .env
+     # The defaults in .env.example work for local dev (DEBUG=true).
+     # No changes needed unless you use an external API or want production mode.
      ```
-   - Or for production:
+   - Start the backend with hot-reload (API available at **http://localhost:8080**):
      ```bash
-     ./start.sh
+     uvicorn main:app --reload --port 8080
      ```
-
-3. **Frontend Setup**
-   - From the root of the project (or navigate to the frontend folder):
+     Or use the provided convenience script:
      ```bash
+     chmod +x scripts/dev.sh && ./scripts/dev.sh
+     ```
+   - Interactive API docs: **http://localhost:8080/docs**
+
+3. **Frontend Setup** *(in a second terminal)*
+   - Navigate to the `ui/` folder:
+     ```bash
+     cd ui
      npm install
-     npm run dev
+     npm run dev        # dev server with hot-reload at http://localhost:5173
      ```
+
+4. **Ollama *(optional — for local models)***
+   - Install from [ollama.com](https://ollama.com), then:
+     ```bash
+     ollama pull llama3.2
+     ```
+   - Verify `OLLAMA_BASE_URL=http://localhost:11434` is set in your `.env`.
+
+5. **First login**
+   - Open **http://localhost:5173** and create an account.
+   - The **first account registered becomes the administrator**.
+
+6. **Run tests** *(no external services required)*
+   ```bash
+   pytest -q
+   ```
+
+---
 
 ### 🐳 Docker & Docker Compose Setup (Recommended)
 
-For a hassle-free setup without installing Python, Node.js, or other dependencies, use Docker and Docker Compose.
+For a hassle-free setup without installing Python or Node.js, use Docker. A single container serves both the backend and the built frontend.
 
 #### Prerequisites
-1. **Install Docker and Docker Compose** from [docker.com](https://www.docker.com/get-started)
-2. **Git** for cloning the repository
-3. **At least 8GB RAM** (recommended for AI models)
+1. **Docker + Docker Compose** from [docker.com](https://www.docker.com/get-started)
+2. **Git** for cloning
+3. **At least 8 GB RAM** recommended for AI models
 
 #### Step 1: Clone the Repository
 ```bash
@@ -148,75 +176,40 @@ cd open-tutor-ai-CE
 cp .env.example .env
 ```
 
-Edit `.env` file with a text editor. Default values are fine for local development:
-```
-OLLAMA_BASE_URL='http://localhost:11434'
-OPENAI_API_BASE_URL=''
-OPENAI_API_KEY=''
-GEMINI_API_KEY=''
-ENABLE_SIGNUP=true
-WEBUI_SECRET_KEY=replace-with-a-random-secret
-SUPPRESS_WEBUI_BANNER=true
-SCARF_NO_ANALYTICS=true
-DO_NOT_TRACK=true
-ANONYMIZED_TELEMETRY=false
-```
-
-#### Step 3: Choose Your Setup Method
-
-**Option A: Full Stack with Docker Compose (Recommended)**
-
-Ensure your `docker-compose.yaml` includes the Ollama service:
-```yaml
-ollama:
-  image: ollama/ollama:latest
-  container_name: ollama
-  ports:
-    - "11434:11434"
-  volumes:
-    - ollama:/root/.ollama
-  networks:
-    - app-network
-
-volumes:
-  ollama:
-```
-
-Also ensure the backend service has this environment variable:
-```yaml
-environment:
-  - PYTHONUNBUFFERED=1
-  - OLLAMA_BASE_URL=http://ollama:11434
-```
-
-Then start all services:
+For **production**, replace the placeholder `SECRET_KEY` in your `.env` with a randomly generated value:
 ```bash
-docker compose up --build
+# macOS / Linux — replaces the existing SECRET_KEY line in-place
+sed -i.bak "s/^SECRET_KEY=.*/SECRET_KEY=$(openssl rand -hex 32)/" .env && rm .env.bak
 ```
 
-This starts backend (port 8080), frontend (port 5173), and Ollama (port 11434) together.
+For **local development**, the defaults in `.env.example` work as-is (`DEBUG=true` bypasses the key check).
 
-**Option B: Docker Compose without Ollama in Compose**
+#### Step 3: Start the Stack
 
-If your `docker-compose.yaml` does NOT include the Ollama service, start only backend and frontend:
+**With Ollama bundled (recommended for local models):**
 ```bash
-docker compose up --build
+docker compose --env-file .env -f docker/docker-compose.yaml up --build
 ```
 
-Then in another terminal, start Ollama separately:
+This starts:
+- `open-tutorai` — backend + frontend at **http://localhost:8080**
+- `ollama` — local model server at **http://localhost:11434**
+
+**Without Ollama (use an external OpenAI-compatible API):**
 ```bash
-chmod +x run-ollama-docker.sh
-./run-ollama-docker.sh
+docker compose --env-file .env -f docker/docker-compose.yaml up --build open-tutorai
 ```
 
-Ensure `.env` has the correct Ollama URL:
-```
-OLLAMA_BASE_URL='http://localhost:11434'
+Set `OPENAI_API_BASE_URL` and `OPENAI_API_KEY` in `.env`.
+
+Then in another terminal, you can also start Ollama separately:
+```bash
+chmod +x scripts/run-ollama-docker.sh
+./scripts/run-ollama-docker.sh
 ```
 
-#### Step 4: Download AI Models
+#### Step 4: Download AI Models (if using Ollama)
 
-Once Ollama is running, download a model:
 ```bash
 docker exec -it ollama ollama pull llama3.2
 ```
@@ -226,33 +219,62 @@ Verify the model is installed:
 docker exec -it ollama ollama list
 ```
 
-If the backend was already running before the model was installed, restart it:
+If the backend was already running before the model was pulled, restart it:
 ```bash
-docker restart open-tutor-backend
+docker compose --env-file .env -f docker/docker-compose.yaml restart open-tutorai
 ```
 
 #### Step 5: Access the Application
 
-Open your browser and go to `http://localhost:5173`. You should see the Open TutorAI interface!
-
-- **Create an account** or log in
-- **Select the model** (llama3.2 or any model you pulled)
-- **Start a chat** with the AI
+Open **http://localhost:8080** in your browser. The **first account created becomes the administrator**.
 
 #### Stopping the Services
 
-To stop all containers:
 ```bash
-docker compose down
+docker compose --env-file .env -f docker/docker-compose.yaml down
+
+# Full reset (removes all data volumes)
+docker compose --env-file .env -f docker/docker-compose.yaml down -v
 ```
 
-Or press `Ctrl + C` in the terminal where Docker Compose is running.
+#### GPU Support
+
+```bash
+# NVIDIA GPU
+docker compose --env-file .env -f docker/docker-compose.yaml -f docker/docker-compose.gpu.yaml up --build
+
+# AMD GPU
+docker compose --env-file .env -f docker/docker-compose.yaml -f docker/docker-compose.amdgpu.yaml up --build
+```
+
+---
+
+### ⚙️ Environment Variables Reference
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DEBUG` | `true` | Set to `false` in production. Enables SECRET_KEY strength check. |
+| `SECRET_KEY` | *(dev placeholder)* | JWT signing key. Required in production (`openssl rand -hex 32`). |
+| `DATABASE_URL` | `sqlite:///./var/tutorai.db` | SQLAlchemy URL. SQLite for dev, PostgreSQL for production. |
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server. Use `http://ollama:11434` inside Docker Compose. |
+| `OPENAI_API_BASE_URL` | *(empty)* | OpenAI-compatible API (LMStudio, GroqCloud, Mistral…). |
+| `OPENAI_API_KEY` | *(empty)* | API key for the OpenAI-compatible provider. |
+| `GEMINI_API_KEY` | *(empty)* | Google Gemini API key. |
+| `CORS_ALLOW_ORIGIN` | `http://localhost:3000,http://localhost:5173` | Comma-separated allowed CORS origins. |
+| `UPLOAD_DIR` | `./var/uploads` | Directory for uploaded files. |
+| `MAX_UPLOAD_SIZE_MB` | `100` | Maximum upload size in MB. |
+| `VECTOR_DB_PATH` | `./var/vector_db` | ChromaDB storage path for RAG. |
+| `EMBEDDING_MODEL` | `sentence-transformers/all-MiniLM-L6-v2` | Default embedding model for RAG. |
+| `AUDIO_TTS_ENGINE` | *(empty)* | TTS engine (e.g. `openai`). Configure via Admin > Settings > Audio. |
+| `AUDIO_STT_ENGINE` | *(empty)* | STT engine. Configure via Admin > Settings > Audio. |
+| `IMAGES_ENGINE` | *(empty)* | Image generation engine (e.g. `openai`). Configure via Admin > Settings > Images. |
+| `GLOBAL_LOG_LEVEL` | `INFO` | Log level: `DEBUG`, `INFO`, `WARNING`, `ERROR`. |
 
 ---
 
 ### Troubleshooting
 
-Encountering connection issues? Our [Open TutorAI Documentation](https://opentutorai.com/docs/troubleshooting/) has got you covered. For further assistance and to join our vibrant community, visit the [Open TutorAI Discord](https://discord.gg/BTQtE2deEm).
+Encountering connection issues? See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for common fixes, or visit our [Open TutorAI Documentation](https://opentutorai.com/docs/troubleshooting/). For further assistance, join the [Open TutorAI Discord](https://discord.gg/BTQtE2deEm).
 
 ## 🌟 What's Next? 
 
@@ -280,4 +302,4 @@ If you have any questions, suggestions, or need assistance, please open an issue
 
 ---
 
-Created by [El Hajji](https://github.com/pr-elhajji) - Let's make Open TutorAI even more amazing together! 💪
+Founded by [Mohamed El Hajji](https://github.com/pr-elhajji) and built by the community - Let's make Open TutorAI even more amazing together! 💪

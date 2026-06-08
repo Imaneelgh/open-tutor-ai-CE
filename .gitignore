@@ -3,6 +3,10 @@ node_modules
 /build
 /.svelte-kit
 /package
+# SvelteKit generated/build output inside ui/ subdir
+# (leading-slash patterns above only anchor at repo root, not inside ui/)
+ui/.svelte-kit/
+ui/build/
 .env
 .env.*
 !.env.example
@@ -186,7 +190,14 @@ lerna-debug.log*
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
-# Runtime data
+# Runtime data — never commit DB files or generated artifacts
+var/
+data/*.db
+data/*.db-journal
+data/vector_db/
+*.sqlite3
+*.sqlite3-journal
+
 pids
 *.pid
 *.seed
@@ -311,4 +322,8 @@ cypress/screenshots
 .vscode/settings.json
 
 # Ignored files by ZN
-eziane_docs
+eziane_docs.worktrees/
+.worktrees/
+
+# Superpowers plans/specs (local dev tooling, not part of the project)
+docs/superpowers/
